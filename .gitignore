@@ -1,0 +1,5 @@
+notepad .gitignore
+.env
+venv/
+__pycache__/
+*.pyc
