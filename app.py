@@ -173,6 +173,7 @@ if __name__ == "__main__":
         format="[%(asctime)s] %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
-    print("Server berjalan di http://0.0.0.0:5000")
+    port = int(os.getenv("PORT", 5000))
+    print(f"Server berjalan di http://0.0.0.0:{port}")
     from waitress import serve
-    serve(app, host="0.0.0.0", port=5000)
+    serve(app, host="0.0.0.0", port=port)
