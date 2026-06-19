@@ -39,12 +39,21 @@ def _verifikasi_response(req):
 
 @app.route("/debug-token")
 def debug_token():
-    import os
+    import os, requests as req
     token = os.getenv("TOKEN", "")
+    phone_id = os.getenv("PHONE_ID", "")
+    # Test langsung ke Meta API
+    r = req.get(f"https://graph.facebook.com/v18.0/{phone_id}",
+                params={"access_token": token})
     return jsonify({
         "token_length": len(token),
         "token_prefix": token[:20] if token else "EMPTY",
-        "phone_id": os.getenv("PHONE_ID", "EMPTY"),
+        "token_suffix": token[-10:] if token else "EMPTY",
+        "has_newline": "\n" in token or "\r" in token,
+        "has_space": " " in token,
+        "phone_id": phone_id,
+        "meta_api_status": r.status_code,
+        "meta_api_response": r.json(),
     })
 
 @app.route("/webhook", methods=["GET"])
