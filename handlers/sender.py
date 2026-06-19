@@ -1,19 +1,17 @@
 import requests
 import os
 
-TOKEN = os.getenv("TOKEN")
-PHONE_ID = os.getenv("PHONE_ID")
+_BASE_URL = "https://graph.facebook.com/v18.0"
 
-_BASE_URL = f"https://graph.facebook.com/v18.0"
-_HEADERS = lambda: {
-    "Authorization": f"Bearer {TOKEN}",
-    "Content-Type": "application/json",
-}
-
+def _headers():
+    return {
+        "Authorization": f"Bearer {os.getenv('TOKEN')}",
+        "Content-Type": "application/json",
+    }
 
 def _post(payload: dict):
-    url = f"{_BASE_URL}/{PHONE_ID}/messages"
-    r = requests.post(url, headers=_HEADERS(), json=payload)
+    url = f"{_BASE_URL}/{os.getenv('PHONE_ID')}/messages"
+    r = requests.post(url, headers=_headers(), json=payload)
     print(f"[SEND] status={r.status_code} body={r.text[:200]}")
     return r
 
