@@ -37,6 +37,16 @@ def _verifikasi_response(req):
         return resp
     return "Token salah", 403
 
+@app.route("/debug-token")
+def debug_token():
+    import os
+    token = os.getenv("TOKEN", "")
+    return jsonify({
+        "token_length": len(token),
+        "token_prefix": token[:20] if token else "EMPTY",
+        "phone_id": os.getenv("PHONE_ID", "EMPTY"),
+    })
+
 @app.route("/webhook", methods=["GET"])
 def verifikasi():
     return _verifikasi_response(request)
