@@ -37,6 +37,30 @@ def _verifikasi_response(req):
         return resp
     return "Token salah", 403
 
+@app.route("/test-send")
+def test_send():
+    import os, requests as req
+    token = os.getenv("TOKEN", "")
+    phone_id = os.getenv("PHONE_ID", "")
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": os.getenv("ADMIN_NUMBER", ""),
+        "type": "text",
+        "text": {"body": "test dari render"}
+    }
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    r = req.post(f"https://graph.facebook.com/v18.0/{phone_id}/messages",
+                 headers=headers, json=payload)
+    return jsonify({
+        "status": r.status_code,
+        "response": r.json(),
+        "token_prefix": token[:20],
+        "token_len": len(token),
+    })
+
 @app.route("/debug-token")
 def debug_token():
     import os, requests as req
