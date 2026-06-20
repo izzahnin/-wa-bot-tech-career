@@ -1,4 +1,4 @@
-from handlers.sender import kirim_gambar_tombol, kirim_list
+from handlers.sender import kirim_gambar_tombol, kirim_list, kirim_tombol
 
 BANNER_URL = "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80"
 
@@ -16,7 +16,7 @@ def kirim_menu_utama(nomor: str, nama: str):
         {"type": "reply", "reply": {"id": "btn_progress",  "title": "📊 Progres Saya"}},
         {"type": "reply", "reply": {"id": "btn_challenge", "title": "⚡ Tantangan Hari Ini"}},
     ]
-    kirim_gambar_tombol(nomor, BANNER_URL, body, footer, buttons)
+    kirim_tombol(nomor, body, footer, buttons)
 
 
 def kirim_menu_roadmap(nomor: str):
