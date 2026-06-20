@@ -10,7 +10,10 @@ def _headers():
     }
 
 def _post(payload: dict):
-    url = f"{_BASE_URL}/{os.getenv('PHONE_ID')}/messages"
+    token = os.getenv('TOKEN', '')
+    phone_id = os.getenv('PHONE_ID', '')
+    print(f"[SEND_DEBUG] token_len={len(token)} phone_id={phone_id} token_prefix={token[:15]}")
+    url = f"{_BASE_URL}/{phone_id}/messages"
     r = requests.post(url, headers=_headers(), json=payload)
     print(f"[SEND] status={r.status_code} body={r.text[:200]}")
     return r
