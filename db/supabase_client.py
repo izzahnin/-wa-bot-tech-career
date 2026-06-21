@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from supabase import create_client, Client
 
 _client: Client | None = None
@@ -146,13 +146,57 @@ def get_challenge_day(user_id: str, path_id: str) -> int:
     return 1
 
 
-def get_done_this_week(user_id: str) -> int:
+def save_booking(wa_number: str, nama: str, layanan: str, paket: str, tanggal: str, jam: str) -> dict:
+    sb = get_client()
+    result = sb.table("bookings").insert({
+        "wa_number": wa_number,
+        "nama": nama,
+        "layanan": layanan,
+        "paket": paket,
+        "tanggal": tanggal,
+        "jam": jam,
+        "status": "menunggu_konfirmasi",
+    }).execute()
+    return result.data[0] if result.data else {}
+
+
+def get_bookings(wa_number: str) -> list:
     sb = get_client()
     result = (
-        sb.table("daily_challenges")
-        .select("id")
-        .eq("user_id", user_id)
-        .eq("status", "done")
+        sb.table("bookings")
+        .select("*")
+        .eq("wa_number", wa_number)
+        .neq("status", "dibatalkan")
+        .order("tanggal", desc=False)
         .execute()
     )
-    return len(result.data)
+    return result.data or []
+
+
+def update_booking_status(booking_id: str, status: str):
+    sb = get_client()
+    sb.table("bookings").update({"status": status}).eq("id", booking_id).execute()
+
+
+def is_slot_available(tanggal: str, jam: str) -> bool:
+    sb = get_client()
+    # Cek di tabel time_slots jika ada entri yang explicitly tidak tersedia
+    result = (
+        sb.table("time_slots")
+        .select("is_available")
+        .eq("tanggal", tanggal)
+        .eq("jam", jam)
+        .execute()
+    )
+    if result.data:
+        return result.data[0]["is_available"]
+    # Cek berapa booking aktif di slot yang sama
+    bookings = (
+        sb.table("bookings")
+        .select("id")
+        .eq("tanggal", tanggal)
+        .eq("jam", jam)
+        .neq("status", "dibatalkan")
+        .execute()
+    )
+    return len(bookings.data) < 2

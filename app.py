@@ -3,13 +3,13 @@ import os
 from dotenv import load_dotenv
 
 from handlers.sender import kirim_teks
-from handlers.menu import kirim_menu_utama, kirim_menu_roadmap
-from handlers.roadmap import kirim_detail_path, kirim_konfirmasi_enroll
-from handlers.challenge import kirim_tantangan_harian, kirim_respons_challenge, kirim_placeholder_progress
-from db.supabase_client import (
-    upsert_user, get_user, save_enrollment,
-    save_challenge_response, get_streak, get_challenge_day, get_done_this_week,
+from handlers.menu import kirim_menu_utama
+from handlers.services import kirim_list_layanan, kirim_detail_layanan
+from handlers.booking import (
+    mulai_booking, proses_paket, proses_tanggal,
+    proses_jam, konfirmasi_booking, kirim_daftar_booking,
 )
+from db.supabase_client import upsert_user, get_state, set_state
 
 load_dotenv()
 
@@ -18,67 +18,48 @@ app = Flask(__name__)
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 ADMIN_NUMBER = os.getenv("ADMIN_NUMBER")
 
-ROADMAP_PATH_IDS = {
-    "path_backend_golang",
-    "path_frontend_react",
-    "path_cloud_engineer",
-    "path_fullstack",
-    "path_devops",
-    "path_mobile_flutter",
-}
-
 
 def _verifikasi_response(req):
     incoming_token = req.args.get("hub.verify_token")
-    print(f"[VERIFY] incoming={repr(incoming_token)} expected={repr(VERIFY_TOKEN)}")
     if incoming_token == VERIFY_TOKEN:
         resp = Response(req.args.get("hub.challenge", ""))
         resp.headers["ngrok-skip-browser-warning"] = "true"
         return resp
     return "Token salah", 403
 
+
 @app.route("/test-send")
 def test_send():
-    import os, requests as req
+    import requests as req
     token = os.getenv("TOKEN", "")
     phone_id = os.getenv("PHONE_ID", "")
     payload = {
         "messaging_product": "whatsapp",
-        "to": os.getenv("ADMIN_NUMBER", ""),
+        "to": ADMIN_NUMBER or "",
         "type": "text",
-        "text": {"body": "test dari render"}
+        "text": {"body": "test dari render — Studio Foto Bot"},
     }
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     r = req.post(f"https://graph.facebook.com/v18.0/{phone_id}/messages",
                  headers=headers, json=payload)
-    return jsonify({
-        "status": r.status_code,
-        "response": r.json(),
-        "token_prefix": token[:20],
-        "token_len": len(token),
-    })
+    return jsonify({"status": r.status_code, "response": r.json()})
+
 
 @app.route("/debug-token")
 def debug_token():
-    import os, requests as req
+    import requests as req
     token = os.getenv("TOKEN", "")
     phone_id = os.getenv("PHONE_ID", "")
-    # Test langsung ke Meta API
     r = req.get(f"https://graph.facebook.com/v18.0/{phone_id}",
                 params={"access_token": token})
     return jsonify({
         "token_length": len(token),
         "token_prefix": token[:20] if token else "EMPTY",
-        "token_suffix": token[-10:] if token else "EMPTY",
-        "has_newline": "\n" in token or "\r" in token,
-        "has_space": " " in token,
         "phone_id": phone_id,
         "meta_api_status": r.status_code,
         "meta_api_response": r.json(),
     })
+
 
 @app.route("/webhook", methods=["GET"])
 def verifikasi():
@@ -109,7 +90,7 @@ def terima_pesan():
         upsert_user(nomor, nama)
 
         if tipe == "text":
-            kirim_menu_utama(nomor, nama)
+            _handle_text(nomor, nama, pesan["text"]["body"])
 
         elif tipe == "interactive":
             pilihan = (
@@ -124,89 +105,90 @@ def terima_pesan():
     return jsonify({"status": "ok"})
 
 
+def _handle_text(nomor: str, nama: str, teks: str):
+    state = get_state(nomor)
+    current = state.get("current_state", "IDLE")
+
+    if current == "TUNGGU_TANGGAL":
+        proses_tanggal(nomor, teks, nama)
+        return
+
+    # Pesan teks apapun di luar flow → tampilkan menu utama
+    kirim_menu_utama(nomor, nama)
+
+
 def _handle_interactive(nomor: str, nama: str, pilihan: str):
     if pilihan is None:
-        kirim_teks(nomor, "Maaf, terjadi kesalahan. Coba lagi ya!")
+        kirim_teks(nomor, "Maaf, terjadi kesalahan. Silakan coba lagi.")
         return
 
-    # ── Navigasi utama ──────────────────────────────────────────────────────
-    if pilihan == "btn_roadmap" or pilihan == "btn_main_menu_roadmap":
-        kirim_menu_roadmap(nomor)
+    # ── Menu utama ────────────────────────────────────────────────────────────
+    if pilihan == "btn_layanan":
+        kirim_list_layanan(nomor)
         return
 
-    if pilihan == "btn_main_menu":
+    if pilihan == "btn_cek_booking":
+        kirim_daftar_booking(nomor)
+        return
+
+    if pilihan in ("btn_kembali_menu", "btn_main_menu"):
         kirim_menu_utama(nomor, nama)
         return
 
-    if pilihan == "btn_progress":
-        kirim_placeholder_progress(nomor, nama)
-        return
-
-    if pilihan == "btn_challenge":
-        user = get_user(nomor)
-        path_id = user.get("active_path") or "path_backend_golang"
-        day = get_challenge_day(user["id"], path_id) if user.get("id") else 1
-        kirim_tantangan_harian(nomor, path_id=path_id, day=day)
-        return
-
-    # ── Pilih roadmap (dari list message) ──────────────────────────────────
-    if pilihan in ROADMAP_PATH_IDS:
-        kirim_detail_path(nomor, pilihan)
-        return
-
-    # ── Enroll ke path ──────────────────────────────────────────────────────
-    if pilihan.startswith("enroll_"):
-        path_id = pilihan.replace("enroll_", "", 1)
-        user = upsert_user(nomor, nama)
-        if user.get("id"):
-            save_enrollment(user["id"], path_id)
-        kirim_konfirmasi_enroll(nomor, nama, path_id)
-        # Notifikasi ke admin
+    if pilihan == "btn_cs":
         if ADMIN_NUMBER:
             kirim_teks(
                 ADMIN_NUMBER,
-                f"🔔 *Enrollment Baru!*\n\n"
+                f"🔔 *Pelanggan butuh bantuan CS!*\n\n"
                 f"👤 Nama: {nama}\n"
-                f"📱 Nomor: +{nomor}\n"
-                f"🗺️ Path: {path_id}\n"
-                f"🔗 wa.me/{nomor}"
-            )
-        return
-
-    # ── Respons tantangan harian ────────────────────────────────────────────
-    if pilihan.startswith("challenge_"):
-        parts = pilihan.split("_")
-        action = parts[1]
-        day = int(parts[2].replace("day", "")) if len(parts) > 2 else 1
-        user = get_user(nomor)
-        if user.get("id") and action in ("done", "skip"):
-            path_id = user.get("active_path") or "path_backend_golang"
-            status = "done" if action == "done" else "skipped"
-            save_challenge_response(user["id"], path_id, day, status)
-            streak = get_streak(user["id"])
-            done_week = get_done_this_week(user["id"])
-        else:
-            streak, done_week = 0, 0
-        kirim_respons_challenge(nomor, nama, day, action, streak=streak, done_this_week=done_week)
-        return
-
-    # ── Tanya CS ─────────────────────────────────────────────────────────────
-    if pilihan == "cs":
-        if ADMIN_NUMBER:
-            kirim_teks(
-                ADMIN_NUMBER,
-                f"🔔 *Ada pengguna butuh bantuan!*\n\n"
-                f"👤 Nama: {nama}\n📱 Nomor: +{nomor}\n🔗 wa.me/{nomor}"
+                f"📱 No WA: wa.me/{nomor}"
             )
         kirim_teks(
             nomor,
-            "✅ *Pesanmu sudah diterima!*\n\n"
-            "Tim kami akan segera menghubungimu.\n"
-            "_Jam layanan: Senin–Jumat 09.00–17.00 WIB_ 😊"
+            "✅ *Pesanmu sudah kami terima!*\n\n"
+            "Tim CS kami akan segera menghubungi Anda.\n"
+            "_Jam layanan: Senin–Sabtu 09.00–18.00 WIB_ 😊"
         )
         return
 
-    kirim_teks(nomor, "Maaf, opsi tidak dikenali. Ketik sembarang untuk kembali ke menu utama.")
+    # ── Pilih layanan dari list ───────────────────────────────────────────────
+    if pilihan.startswith("svc_"):
+        service_id = pilihan[4:]
+        kirim_detail_layanan(nomor, service_id)
+        return
+
+    # ── Mulai booking (dari detail layanan) ──────────────────────────────────
+    if pilihan.startswith("booking_"):
+        service_id = pilihan[8:]
+        mulai_booking(nomor, service_id)
+        return
+
+    # ── Pilih paket dari list ─────────────────────────────────────────────────
+    # format: paket_{service_id}_{paket_id}
+    if pilihan.startswith("paket_"):
+        parts = pilihan[6:].rsplit("_", 1)
+        if len(parts) == 2:
+            service_id, paket_id = parts
+            proses_paket(nomor, service_id, paket_id)
+        return
+
+    # ── Pilih jam dari list ───────────────────────────────────────────────────
+    if pilihan.startswith("jam_"):
+        proses_jam(nomor, pilihan, nama)
+        return
+
+    # ── Konfirmasi atau batal booking ─────────────────────────────────────────
+    if pilihan == "btn_konfirmasi":
+        konfirmasi_booking(nomor, nama)
+        return
+
+    if pilihan == "btn_batal_booking":
+        set_state(nomor, "IDLE", {})
+        kirim_teks(nomor, "Booking dibatalkan. Ketuk menu di bawah untuk mulai lagi.")
+        kirim_menu_utama(nomor, nama)
+        return
+
+    kirim_teks(nomor, "Maaf, opsi tidak dikenali. Ketuk sembarang untuk kembali ke menu.")
 
 
 if __name__ == "__main__":
