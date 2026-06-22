@@ -9,8 +9,8 @@ def kirim_menu_utama(nomor: str, nama: str):
     )
     footer = "_Senin–Sabtu, 09.00–18.00 WIB_"
     buttons = [
-        {"type": "reply", "reply": {"id": "btn_layanan",  "title": "📸 Lihat Layanan"}},
+        {"type": "reply", "reply": {"id": "btn_layanan",     "title": "📸 Lihat Layanan"}},
         {"type": "reply", "reply": {"id": "btn_cek_booking", "title": "📅 Cek Booking Saya"}},
-        {"type": "reply", "reply": {"id": "btn_cs",       "title": "💬 Tanya CS"}},
+        {"type": "reply", "reply": {"id": "btn_ai",          "title": "🤖 Tanya AI"}},
     ]
     kirim_tombol(nomor, body, footer, buttons)

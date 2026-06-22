@@ -9,6 +9,8 @@ from handlers.booking import (
     mulai_booking, proses_paket, proses_tanggal,
     proses_jam, konfirmasi_booking, kirim_daftar_booking,
 )
+from handlers.ai_router import route_message, build_system_prompt
+from handlers.llm_client import tanya_llm
 from db.supabase_client import upsert_user, get_state, set_state
 
 load_dotenv()
@@ -113,8 +115,29 @@ def _handle_text(nomor: str, nama: str, teks: str):
         proses_tanggal(nomor, teks, nama)
         return
 
-    # Pesan teks apapun di luar flow → tampilkan menu utama
-    kirim_menu_utama(nomor, nama)
+    # Keluar dari mode AI
+    if current == "FREE_TEXT" and teks.lower().strip() in ("menu", "selesai", "keluar"):
+        set_state(nomor, "IDLE", {})
+        kirim_menu_utama(nomor, nama)
+        return
+
+    aksi = route_message({"type": "text", "text": {"body": teks}}, current)
+
+    if aksi == "AI_LLM":
+        system = build_system_prompt(nama)
+        jawaban = tanya_llm(system, teks)
+        kirim_teks(nomor, jawaban)
+
+    elif aksi == "ENTER_AI_MODE":
+        set_state(nomor, "FREE_TEXT", {})
+        kirim_teks(
+            nomor,
+            f"Halo {nama}! Saya siap menjawab pertanyaan seputar fotografi dan layanan studio kami 📸\n\n"
+            "_Ketik *menu* kapan saja untuk kembali ke menu utama._",
+        )
+
+    else:
+        kirim_menu_utama(nomor, nama)
 
 
 def _handle_interactive(nomor: str, nama: str, pilihan: str):
@@ -133,6 +156,15 @@ def _handle_interactive(nomor: str, nama: str, pilihan: str):
 
     if pilihan in ("btn_kembali_menu", "btn_main_menu"):
         kirim_menu_utama(nomor, nama)
+        return
+
+    if pilihan == "btn_ai":
+        set_state(nomor, "FREE_TEXT", {})
+        kirim_teks(
+            nomor,
+            f"Halo {nama}! Tanyakan apapun seputar fotografi dan layanan studio kami 📸\n\n"
+            "_Ketik *menu* kapan saja untuk kembali ke menu utama._",
+        )
         return
 
     if pilihan == "btn_cs":

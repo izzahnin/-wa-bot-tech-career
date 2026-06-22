@@ -1,14 +1,9 @@
-# Blueprint transisi ke AI LLM (Google Gemini API)
-# File ini BELUM aktif — digunakan sebagai referensi arsitektur fase berikutnya.
-# Aktifkan dengan: pip install google-generativeai
-
-FREE_TEXT_STATES = {"FREE_TEXT", "AI_DEBUG_MODE", "AI_INTERVIEW_MODE"}
+FREE_TEXT_STATES = {"FREE_TEXT"}
 
 
 def route_message(pesan: dict, user_state: str) -> str:
     """
-    Tentukan apakah pesan harus ditangani rule-based atau dikirim ke LLM.
-    Returns: "RULE_BASED" | "AI_LLM" | "REDIRECT_TO_MENU" | "IGNORE"
+    Return: "RULE_BASED" | "AI_LLM" | "ENTER_AI_MODE" | "REDIRECT_TO_MENU" | "IGNORE"
     """
     tipe = pesan.get("type")
 
@@ -18,54 +13,37 @@ def route_message(pesan: dict, user_state: str) -> str:
     if tipe == "text":
         if user_state in FREE_TEXT_STATES:
             return "AI_LLM"
+        teks = pesan.get("text", {}).get("body", "").lower().strip()
+        if teks in ("tanya ai", "tanya", "chat", "ai"):
+            return "ENTER_AI_MODE"
         return "REDIRECT_TO_MENU"
 
     return "IGNORE"
 
 
-def build_system_prompt(user: dict) -> str:
-    """
-    Buat system prompt kontekstual untuk Gemini API berdasarkan profil pengguna dari DB.
-
-    Param user (dict) berisi:
-        name, active_path, modules_done, total_modules, streak, current_state, recent_history
-    """
+def build_system_prompt(nama: str) -> str:
     return f"""
-Kamu adalah "Tech-Career Mentor", asisten belajar coding personal yang berjalan di WhatsApp.
+Kamu adalah asisten virtual Studio Foto profesional yang melayani pelanggan via WhatsApp.
 
 ## Identitas
-- Nama: Tech-Career Mentor
-- Tone: Santai tapi profesional, khas kultur developer Indonesia
-- Gunakan istilah teknis yang tepat (endpoint, payload, stack, deploy, dsb.)
-- Jawab dalam Bahasa Indonesia, kecuali istilah teknis tetap dalam Bahasa Inggris
-- Jangan pernah menyebut bahwa kamu adalah Gemini atau produk Google
+- Nama: Asisten Studio
+- Tone: Ramah, sopan, helpful — seperti staf CS yang berpengalaman
+- Bahasa: Indonesia, santai tapi profesional
 
-## Profil Pengguna Saat Ini
-- Nama: {user.get('name', 'Developer')}
-- Learning Path Aktif: {user.get('active_path', 'Belum memilih path')}
-- Total modul selesai: {user.get('modules_done', 0)} dari {user.get('total_modules', 0)}
-- Streak tantangan harian: {user.get('streak', 0)} hari
+## Pelanggan Saat Ini
+- Nama: {nama}
 
-## Aturan Penting
-- JANGAN keluar dari topik teknologi dan karir developer
-- JANGAN berikan kunci jawaban tantangan harian secara langsung — berikan hint bertahap
-- Jika pengguna mengirim kode error, analisis dan berikan penjelasan edukatif
+## Tugas Utama
+- Jawab pertanyaan seputar layanan foto studio (indoor, photobooth, produk, wisuda, prewedding)
+- Bantu pelanggan memilih paket yang sesuai kebutuhan dan budget
+- Jelaskan proses booking, tips persiapan sesi foto, rekomendasi outfit, dll
+- Jika pelanggan ingin booking atau cek harga detail → arahkan ketik *menu*
+
+## Batasan
+- JANGAN bahas topik di luar fotografi dan layanan studio
+- JANGAN buat janji harga atau slot yang tidak ada di sistem
+- Jika tidak tahu jawaban pasti → sarankan hubungi CS langsung
 - Respons maksimal 3 paragraf pendek agar nyaman dibaca di WhatsApp
 
-## Konteks Sesi
-Mode saat ini: {user.get('current_state', 'FREE_TEXT')}
-Riwayat pesan terakhir: {user.get('recent_history', '(belum ada riwayat)')}
+Pelanggan bisa ketik *menu* kapan saja untuk kembali ke menu utama.
 """.strip()
-
-
-# Contoh integrasi Gemini (uncomment saat siap):
-#
-# import google.generativeai as genai
-#
-# genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-# model = genai.GenerativeModel("gemini-1.5-flash")
-#
-# def tanya_ai(user: dict, pesan_user: str) -> str:
-#     system = build_system_prompt(user)
-#     response = model.generate_content(f"{system}\n\nUser: {pesan_user}")
-#     return response.text
