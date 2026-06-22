@@ -10,6 +10,10 @@ bot-testing/
 ├── .gitignore
 ├── ngrok.exe                 # Tool tunnel lokal untuk testing webhook
 │
+├── PROJECT_STRUCTURE.md      # Dokumentasi struktur folder & fungsi tiap file (file ini)
+├── LLM_INTEGRATION_PLAN.md   # Blueprint & tutorial step-by-step integrasi LLM
+├── LLM_TECHNICAL_DOC.md      # Dokumentasi teknis cara kerja LLM & arsitektur AI
+│
 ├── config/
 │   ├── __init__.py
 │   └── content.py            # Data master layanan, slot waktu, dan label status booking
@@ -22,7 +26,8 @@ bot-testing/
 ├── handlers/
 │   ├── __init__.py
 │   ├── admin.py              # Notifikasi booking baru ke admin
-│   ├── ai_router.py          # Blueprint routing ke AI/LLM (belum aktif)
+│   ├── ai_router.py          # Routing pesan ke LLM — aktif sejak integrasi Gemini
+│   ├── llm_client.py         # Wrapper Google Gemini API — fungsi tanya_llm()
 │   ├── booking.py            # Alur booking lengkap (pilih paket → tanggal → jam → konfirmasi)
 │   ├── challenge.py          # Fitur challenge/tantangan harian
 │   ├── menu.py               # Kirim menu utama WhatsApp
@@ -145,13 +150,23 @@ Handler khusus untuk notifikasi ke nomor admin.
 
 ---
 
-### `handlers/ai_router.py` *(Blueprint — belum aktif)*
-Rancangan arsitektur untuk integrasi AI/LLM di fase berikutnya. File ini tidak dipanggil oleh `app.py`.
+### `handlers/ai_router.py`
+Router yang menentukan apakah pesan diteruskan ke LLM atau ditangani rule-based.
 
 | Fungsi | Keterangan |
 |--------|-----------|
-| `route_message(pesan, user_state)` | Tentukan apakah pesan ditangani rule-based atau dikirim ke LLM; return `"RULE_BASED"` / `"AI_LLM"` / `"REDIRECT_TO_MENU"` / `"IGNORE"` |
-| `build_system_prompt(user)` | Buat system prompt Gemini API yang dipersonalisasi (nama, learning path, streak, riwayat chat) |
+| `route_message(pesan, user_state)` | Return `"RULE_BASED"` / `"AI_LLM"` / `"ENTER_AI_MODE"` / `"REDIRECT_TO_MENU"` / `"IGNORE"` berdasarkan tipe pesan & state user |
+| `build_system_prompt(nama)` | Buat system prompt kontekstual untuk Gemini — mendefinisikan identitas, batasan, dan tugas bot |
+
+---
+
+### `handlers/llm_client.py`
+Abstraksi komunikasi ke Google Gemini API.
+
+| Fungsi | Keterangan |
+|--------|-----------|
+| `_get_client()` | Singleton `genai.Client` — lazy-init dari env var `GEMINI_API_KEY` |
+| `tanya_llm(system_prompt, pesan_user)` | Kirim prompt ke Gemini 2.0 Flash, return jawaban sebagai string; handle error dengan pesan fallback |
 
 ---
 

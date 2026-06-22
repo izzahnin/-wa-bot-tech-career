@@ -24,5 +24,7 @@ def tanya_llm(system_prompt: str, pesan_user: str) -> str:
         )
         return response.text.strip()
     except Exception as e:
-        print(f"[LLM_ERROR] {e}")
+        import traceback
+        print(f"[LLM_ERROR] {type(e).__name__}: {e}")
+        traceback.print_exc()
         return "Maaf, asisten AI sedang tidak tersedia. Silakan coba lagi nanti."

@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, Response
 import os
+import threading
 from dotenv import load_dotenv
 
 from handlers.sender import kirim_teks
@@ -32,6 +33,9 @@ def _verifikasi_response(req):
 
 @app.route("/test-send")
 def test_send():
+    secret = request.args.get("secret")
+    if not secret or secret != os.getenv("RENDER_SECRET", ""):
+        return "Forbidden", 403
     import requests as req
     token = os.getenv("TOKEN", "")
     phone_id = os.getenv("PHONE_ID", "")
@@ -76,11 +80,16 @@ def verifikasi_hub():
 @app.route("/webhook", methods=["POST"])
 def terima_pesan():
     data = request.json
+    threading.Thread(target=_proses_webhook, args=(data,), daemon=True).start()
+    return jsonify({"status": "ok"})
+
+
+def _proses_webhook(data):
     print("[WEBHOOK]", data)
     try:
         entry = data["entry"][0]["changes"][0]["value"]
         if "messages" not in entry:
-            return jsonify({"status": "ok"})
+            return
 
         pesan = entry["messages"][0]
         nomor = pesan["from"]
@@ -103,8 +112,6 @@ def terima_pesan():
 
     except Exception as e:
         print(f"[ERROR] {e}")
-
-    return jsonify({"status": "ok"})
 
 
 def _handle_text(nomor: str, nama: str, teks: str):
